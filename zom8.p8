@@ -14,6 +14,7 @@ function _init()
 
     --enemies init
     zombies={}
+    make_zombie(4,4)
 
     --map init
     m=make_map()
@@ -59,8 +60,8 @@ function _update()
 
     --zombie
 	for zombie in all(zombies) do
-		zombie:control(p)
-		zombie:update(p)
+        zombie:getPath()
+		zombie:control()
 	end
 end
 -->8
@@ -139,47 +140,56 @@ function make_zombie(x, y)
 		h=0.45,
 		dx=0,
 		dy=0,
-		max_dx=0.1,
-		max_dy=0.1,
+		max_dx=0.2,
+		max_dy=0.2,
 		accel=0.1,
+        pathToP={},
 		
-		control=function(self,a)
-			if self.x > a.x+0.5 then
-				self.dx-=self.accel
-			elseif self.x < a.x-0.5 then
-				self.dx+=self.accel
-			else
-				self.dx=0
-			end
-				
-			if self.y > a.y+0.5 then
-				self.dy-=self.accel
-			elseif self.y < a.y-0.5 then
-				self.dy+=self.accel
-			else
-				self.dy=0
-			end
-			
-			self.dx=mid(-self.max_dx,self.dx,self.max_dx)
-			self.dy=mid(-self.max_dy,self.dy,self.max_dy)
-		end,
-		
-		update=function(self,a)
-		    --map collide	
-			if not solid_area(self.x+self.dx,self.y,self.w,self.h) then
-				self.x+=self.dx
-			else
-				self.dx=0
-			end
-			
-			if not solid_area(self.x,self.y+self.dy,self.w,self.h) then
-				self.y+=self.dy
-			else		
-				self.dy=0
-			end
+        getPath=function(self)
+            self.pathToP = pathfind(self)
+        end,
+
+		control=function(self)
+            if #self.pathToP > 0 then
+                local nextTile = self.pathToP[#self.pathToP]  -- Get the next tile in the path
+
+                if flr(self.x) < nextTile.x then
+                    self.dx += self.accel
+                elseif flr(self.x) > nextTile.x then
+                    self.dx -= self.accel
+                end
+
+                if flr(self.y) < nextTile.y then
+                    self.dy += self.accel
+                elseif flr(self.y) > nextTile.y then
+                    self.dy -= self.accel
+                end
+
+                -- ensures player doesnt exceed max dx or dy in any direction
+                self.dx=mid(-self.max_dx, self.dx, self.max_dx)
+                self.dy=mid(-self.max_dy, self.dy, self.max_dy)
+
+                -- Check if the zombie has reached the next tile
+                if flr(self.x) == nextTile.x and flr(self.y) == nextTile.y then
+                    del(path)  -- Remove the reached tile from the path
+                else
+                    --map collide	
+                    if not solid_area(self.x+self.dx,self.y,self.w,self.h) then
+                        self.x+=self.dx
+                    end
+                    
+                    if not solid_area(self.x,self.y+self.dy,self.w,self.h) then
+                        self.y+=self.dy
+                    end
+                end
+            end
 		end,
 		
 		draw=function(self)
+            for t in all(self.pathToP) do
+                print("p", t.x*8, t.y*8, 7)
+            end
+
 			spr(self.sp,(self.x*8)-4,(self.y*8)-4)
 		end
 		})
@@ -209,7 +219,8 @@ key_direction = {
   [0] = {x = -1, y = 0},
   [1] = {x = 1, y = 0},
   [2] = {x = 0, y = -1},
-  [3] = {x = 0, y = 1}
+  [3] = {x = 0, y = 1},
+  [4] = {x = 0, y = 0}
 }
 
 function make_map()
@@ -236,6 +247,44 @@ function print_map(m)
             print(m[j][i],i*8,j*8,2)
         end
     end
+end
+
+function pathfind(t)
+    local min = m[flr(t.y)][flr(t.x)]
+    local save_ax = flr(t.x)
+    local save_ay = flr(t.y)
+
+    -- base case
+    if min <= 1 then
+        return {x = t.x, y = t.y}
+    end 
+
+    for i=0, 3 do
+        -- check adjacent tiles in the cardinal directions
+        local d = key_direction[i]
+        
+        -- True "position" of tile in m[x][y] looking in every direction
+        local ax = flr(t.x) + d.x    -- d.x looks left or right
+        local ay = flr(t.y) + d.y    -- d.y looks up or down
+
+        -- if the adjacent tile is passable and hasn't yet been traversed (i.e. distance is 9999)
+        if not solid(ax, ay) and m[ay][ax] < min then
+            min = m[ay][ax]
+            save_ax = ax
+            save_ay = ay
+        end
+    end
+
+    local tile = {
+        x = save_ax,
+        y = save_ay
+    }
+
+    local path = pathfind(tile)
+
+    add(path, tile)
+
+    return path
 end
 
 function distmap()
@@ -340,8 +389,8 @@ __map__
 0200000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0202020202020202020202020202020002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0200000002020202000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0202020202020202020202000000020202000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0202020202020202020202000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0200000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
