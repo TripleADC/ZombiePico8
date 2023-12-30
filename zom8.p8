@@ -192,40 +192,20 @@ function make_player(x, y)
 
         draw=function(self)
             -- drawing self sprite
-            self.sp_frames+=1
-            if(self.sp_frames == 30) then
-                self.sp_frames = 0
-            end
+            self.sp_frames=mid(0, self.sp_frames+1, 30)
 
             -- facing up or down
-            if(abs(self.dx) < 0.1 and abs(self.dy) < 0.1) then
-                if (self.sp_frames >= 15) then
-                    if(self.facing == 4) then
-                        self.sp = 22
-                    else
-                        self.sp = 18
-                    end
-                elseif (self.sp_frames >= 0) then
-                    if(self.facing == 4) then
-                        self.sp = 21
-                    else
-                        self.sp = 17
-                    end
-                end
+            if(abs(self.dx) < 0.1 and abs(self.dy) < 0.1) then  
+                self.sp = 17
             else
-                if (self.sp_frames >= 15) then
-                    if(self.facing == 4) then
-                        self.sp = 24
-                    else
-                        self.sp = 20
-                    end
-                else
-                    if(self.facing == 4) then
-                        self.sp = 23
-                    else
-                        self.sp = 19
-                    end
-                end
+                self.sp = 19
+            end
+
+            if(self.facing == 4) then
+                self.sp += 4
+            end
+            if (self.sp_frames >= 15) then
+                self.sp += 1
             end
 
             if self.invincible then
@@ -359,18 +339,14 @@ function make_zombie(x, y)
                 self.hit = false
             end
 
+             if (self.dy < 0) then
+                self.sp = 35
+            elseif (self.dy >= 0) then
+                self.sp = 33
+            end
+            
             if(self.sp_frames >= 15) then
-                if (self.dy < 0) then
-                    self.sp = 36
-                elseif (self.dy >= 0) then
-                    self.sp = 34
-                end
-            else
-                if (self.dy < 0) then
-                    self.sp = 35
-                elseif (self.dy >= 0) then
-                    self.sp = 33
-                end
+               self.sp += 1
             end
 
             if self.hit then
