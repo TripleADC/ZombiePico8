@@ -9,6 +9,7 @@ m={}
 spawners={}
 walls={}
 barriers={}
+vending={}
 z_id=0
 cost = 500
 text_frames=0
@@ -26,14 +27,15 @@ function _init()
 
     --map init
     m=make_map()
-    walls=make_walls()
-    barriers=make_barriers()
+    walls=make(7)
+    barriers=make(8)
+    vending=make(50)
 
     --projectile init
     proj={}
 
     --spawner init
-    spawners=make_zombie_spawners()
+    spawners=make(6)
 
     frict=0.9
 end
@@ -50,7 +52,6 @@ function _draw()
 	--player
     p:draw()
     crs:draw_cursor()
-    crs:draw_box_wall()
 
     --map
     -- print_map(m)
@@ -58,6 +59,8 @@ function _draw()
     print_3D_map(m)
 
     crs:draw_box_barrier(barriers, p)
+    crs:draw_box_wall(walls, p)
+    crs:draw_box_vending(vending, p)
 
     --zombie
 	for zombie in all(zombies) do
@@ -179,14 +182,22 @@ function make_player(x, y)
                 start_wall_timer(walls, c.x, c.y)
             elseif btnp(🅾️) and c.boxed_barrier then
                 if (self.coins >= cost) then
-                    bar = in_barriers(barriers, c.x, c.y)
+                    bar = in_set(barriers, c.x, c.y)
                     destroy_barrier(bar)
                     self.coins -= cost
                     cost += 500
                 else
                     text_frames = 90
                 end
-            elseif btnp(🅾️) and not c.boxed_wall then
+            elseif btnp(🅾️) and c.boxed_vending then
+                vend = in_set(vending, c.x, c.y)
+                if(self.coins >= vend.cost) then
+                    self.health += 1
+                    self.coins -= vend.cost
+                else
+                    text_frames = 90
+                end
+            elseif btnp(🅾️) then
                 if self.facing == 1 then -- right
                     make_projectile(self, 1, 0)
                 elseif self.facing == 2 then -- down
@@ -415,6 +426,7 @@ function make_cursor(p)
          py=0,
          boxed_wall=false,
          boxed_barrier=false,
+         boxed_vending=false,
 
          draw_cursor=function(self)
             spr(49,self.px,self.py)
@@ -442,24 +454,39 @@ function make_cursor(p)
                 self.y-=1
             end
 
-            self.boxed_wall = mget(self.x, self.y) == 7 or fget(mget(self.x, self.y),1)
-            self.boxed_barrier = mget(self.x, self.y) == 8  
+            self.boxed_wall = mget(self.x, self.y) == 7
+            self.boxed_barrier = mget(self.x, self.y) == 8 
+            self.boxed_vending = mget(self.x, self.y) == 50 
          end,
 
-         draw_box_wall=function(self)
+         draw_box_wall=function(self, w, p)
             if(self.boxed_wall) then
-                rect(self.px, self.py, self.px + 8, self.py+8, 7)
+                wall = in_set(w, flr(self.x), flr(self.y))
+                rect(wall.x1 * 8, wall.y1 * 8, wall.x2 * 8 - 1, wall.y2 * 8 - 1, 7)
+                draw_ui_prompt('< build wall? >', p.x*8-30, p.y*8+58)  
+            end      
+         end,
+
+         draw_box_vending=function(self, v, p)
+            if(self.boxed_vending) then
+                vend = in_set(v, flr(self.x), flr(self.y))
+                rect(vend.x1 * 8, vend.y1 * 8, vend.x2 * 8 - 1, vend.y2 * 8 - 1, 7)
+                if(text_frames > 0) then
+                    draw_ui_prompt('< not enough coins! >', p.x*8-40, p.y*8+58)
+                else
+                    draw_ui_prompt('< '..vend.msg..' -> cost:'..vend.cost..'>', p.x*8-48, p.y*8+58) 
+                end 
             end      
          end,
 
          draw_box_barrier=function(self,b,p)
             if(self.boxed_barrier) then
-                bar = in_barriers(b, flr(self.x), flr(self.y))
+                bar = in_set(b, flr(self.x), flr(self.y))
                 rect(bar.x1 * 8, bar.y1 * 8, bar.x2 * 8, bar.y2 * 8,7)
-                if(text_frames == 0) then
-                    draw_ui_prompt('< break wall? -> cost:'..cost..' >', p.x*8-55, p.y*8+58)  
+                if(text_frames > 0) then
+                    draw_ui_prompt('< not enough coins! >', p.x*8-40, p.y*8+58)   
                 else
-                    draw_ui_prompt('< not enough coins! >', p.x*8-40, p.y*8+58)  
+                    draw_ui_prompt('< break barrier? -> cost:'..cost..' >', p.x*8-58, p.y*8+58)  
                 end
             end
          end
@@ -524,70 +551,68 @@ function make_projectile(p, pdx, pdy)
     )
 end
 
-function make_zombie_spawners()
-    spawn={}
+function make(spr)
+    arr={}
     for j=0, map_height do
         for i=0, map_width do
-            if(mget(j,i) == 6) then
-                add(spawn, {x=j,
-                            y=i,
-                            timer= 90 + flr(rnd(200)),
-                            
-                            spawn_zombie=function(self)
-                                if(self.timer > 0) then
-                                    self.timer -= 1
-                                elseif(self.timer == 0 and m[self.y][self.x] > 0) then
-                                    self.timer = 90 + flr(rnd(200))
-                                    make_zombie(self.x, self.y)
-                                end
-                            end})
+            if(spr == 6 and mget(j,i) == 6) then
+                add(arr, get_spawner(j,i))
+            elseif(spr == 7 and mget(j,i) == 7) then
+                add(arr, get_wall(j,i))
+            elseif(spr == 8 and mget(j,i) == 8 and in_set(arr,j,i) == nil) then
+                add(arr, get_barrier(j,i))
+            elseif(spr == 50 and mget(j,i) == 50) then
+                add(arr, get_vending(j,i,1,500,'+1 health?'))
             end
         end
     end
-    return spawn
+    return arr
 end
 
-function make_walls()
-    w={}
-    for j=0, map_height do
-        for i=0, map_width do
-            if(mget(j,i) == 7) then
-                add(w, {x=j,
-                        y=i,
-                        timer=-1,
-                        
-                        degrade=function(self)
-                            if(self.timer > 0) then
-                                self.timer -= 1
-                            elseif(self.timer == 0) then
-                                mset(self.x,self.y,7)
-                                self.timer = -1
-                            end
-                        end})
+function get_vending(j,i,pe,c,m)
+    vending={x1=j,
+             y1=i,
+             x2=j+1,
+             y2=i+1,
+             perk=pe,
+             cost=c,
+             msg=m
+    }
+    return vending
+end
+
+function get_spawner(j, i)
+    spawner={x=j, 
+            y=i,
+            timer= 90 + flr(rnd(200)),
+            
+            spawn_zombie=function(self)
+                if(self.timer > 0) then
+                    self.timer -= 1
+                elseif(self.timer == 0 and m[self.y][self.x] > 0) then
+                    self.timer = 90 + flr(rnd(200))
+                    make_zombie(self.x, self.y)
+                end
+            end}
+    return spawner
+end
+
+function get_wall(j, i)
+    wall={x1=j,
+          y1=i,
+          x2=j+1,
+          y2=i+1,
+          timer=-1,
+        
+          degrade=function(self)
+            if(self.timer > 0) then
+                self.timer -= 1
+            elseif(self.timer == 0) then
+                mset(self.x1,self.y1,7)
+                self.timer = -1
             end
-        end
-    end
-    return w
-end
-
-function start_wall_timer(w, bx, by)
-    for wall in all(w) do
-        if (wall.x == flr(bx)) and (wall.y == flr(by)) then
-            wall.timer = 250 + flr(rnd(300))
-        end
-    end
-end
-
-function make_barriers()
-    b={}
-    for j=0, map_height do
-        for i=0, map_width do
-            if(mget(j,i) == 8 and in_barriers(b,j,i) == nil) then
-                add(b, get_barrier(j,i))
-            end
-        end
-    end
-    return b
+        end}
+    return wall
 end
 
 function get_barrier(x1, y1)
@@ -611,13 +636,12 @@ function get_barrier(x1, y1)
     return bar
 end
 
-function in_barriers(b,x,y)
-    for barrier in all(b) do
-        if(barrier.x1 <= x and x <= barrier.x2) and (barrier.y1 <= y and y <= barrier.y2) then 
-            return barrier
+function start_wall_timer(w, bx, by)
+    for wall in all(w) do
+        if (wall.x1 == flr(bx)) and (wall.y1 == flr(by)) then
+            wall.timer = 250 + flr(rnd(300))
         end
     end
-    return nil
 end
 
 function destroy_barrier(barrier)
@@ -627,6 +651,15 @@ function destroy_barrier(barrier)
         end
     end
     del(barriers, barrier)
+end
+
+function in_set(b,x,y)
+    for m in all(b) do
+        if(m.x1 <= x and x <= m.x2) and (m.y1 <= y and y <= m.y2) then 
+            return m
+        end
+    end
+    return nil
 end
 
 -->8
@@ -921,7 +954,7 @@ __map__
 0205050502050505020202020202050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0202020202050505020202020202050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505320205050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0205050505050505050505053205050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0205050505050505050505050205050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050505050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0202020202020202020202020808020202020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0202020202020202020202020808020202020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
