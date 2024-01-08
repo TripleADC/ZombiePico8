@@ -12,7 +12,10 @@ barriers={}
 vending={}
 z_id=0
 cost = 500
+
 text_frames=0
+msg={text='',dx=0}
+coinmsg=false
 
 function _init()
     --player init
@@ -29,7 +32,7 @@ function _init()
     m=make_map()
     walls=make(7)
     barriers=make(8)
-    vending=make(50)
+    vending=make_vending()
 
     --projectile init
     proj={}
@@ -62,6 +65,10 @@ function _draw()
     crs:draw_box_wall(walls, p)
     crs:draw_box_vending(vending, p)
 
+    if(text_frames > 0)then
+        draw_ui_prompt(msg.text, p.x*8 + msg.dx, p.y*8 + 58)
+    end
+
     --zombie
 	for zombie in all(zombies) do
 		zombie:draw()
@@ -83,6 +90,8 @@ end
 function _update()
     if text_frames > 0 then
         text_frames-=1
+    elseif text_frames == 0 then
+        coinmsg=false
     end
 
     p:control(crs)
@@ -187,7 +196,8 @@ function make_player(x, y)
                     self.coins -= cost
                     cost += 500
                 else
-                    text_frames = 90
+                    coinmsg = true
+                    set_msg('< not enough coins! >', -40)
                 end
             elseif btnp(🅾️) and c.boxed_vending then
                 vend = in_set(vending, c.x, c.y)
@@ -195,7 +205,8 @@ function make_player(x, y)
                     self.health += 1
                     self.coins -= vend.cost
                 else
-                    text_frames = 90
+                    coinmsg = true
+                    set_msg('< not enough coins! >', -40)
                 end
             elseif btnp(🅾️) then
                 if self.facing == 1 then -- right
@@ -463,7 +474,9 @@ function make_cursor(p)
             if(self.boxed_wall) then
                 wall = in_set(w, flr(self.x), flr(self.y))
                 rect(wall.x1 * 8, wall.y1 * 8, wall.x2 * 8 - 1, wall.y2 * 8 - 1, 7)
-                draw_ui_prompt('< build wall? >', p.x*8-30, p.y*8+58)  
+                if(not coinmsg) then
+                    set_msg('< build wall? >', -30)  
+                end
             end      
          end,
 
@@ -471,11 +484,9 @@ function make_cursor(p)
             if(self.boxed_vending) then
                 vend = in_set(v, flr(self.x), flr(self.y))
                 rect(vend.x1 * 8, vend.y1 * 8, vend.x2 * 8 - 1, vend.y2 * 8 - 1, 7)
-                if(text_frames > 0) then
-                    draw_ui_prompt('< not enough coins! >', p.x*8-40, p.y*8+58)
-                else
-                    draw_ui_prompt('< '..vend.msg..' -> cost:'..vend.cost..'>', p.x*8-48, p.y*8+58) 
-                end 
+                if(not coinmsg) then
+                    set_msg('< '..vend.msg..' -> cost:'..vend.cost..'>', -48)
+                end
             end      
          end,
 
@@ -483,10 +494,8 @@ function make_cursor(p)
             if(self.boxed_barrier) then
                 bar = in_set(b, flr(self.x), flr(self.y))
                 rect(bar.x1 * 8, bar.y1 * 8, bar.x2 * 8, bar.y2 * 8,7)
-                if(text_frames > 0) then
-                    draw_ui_prompt('< not enough coins! >', p.x*8-40, p.y*8+58)   
-                else
-                    draw_ui_prompt('< break barrier? -> cost:'..cost..' >', p.x*8-58, p.y*8+58)  
+                if(not coinmsg) then
+                    set_msg('< break barrier? -> cost:'..cost..' >', -58)  
                 end
             end
          end
@@ -509,6 +518,12 @@ end
 function draw_ui_prompt(str, x, y)
     rectfill(p.x*8-64, p.y*8+55, p.x*8+66, p.y*8+66, 0)
     print(str, x, y, 7)
+end
+
+function set_msg(t, disx)
+    text_frames = 50
+    msg.text = t
+    msg.dx = disx
 end
 
 function make_projectile(p, pdx, pdy)
@@ -561,24 +576,10 @@ function make(spr)
                 add(arr, get_wall(j,i))
             elseif(spr == 8 and mget(j,i) == 8 and in_set(arr,j,i) == nil) then
                 add(arr, get_barrier(j,i))
-            elseif(spr == 50 and mget(j,i) == 50) then
-                add(arr, get_vending(j,i,1,500,'+1 health?'))
             end
         end
     end
     return arr
-end
-
-function get_vending(j,i,pe,c,m)
-    vending={x1=j,
-             y1=i,
-             x2=j+1,
-             y2=i+1,
-             perk=pe,
-             cost=c,
-             msg=m
-    }
-    return vending
 end
 
 function get_spawner(j, i)
@@ -615,6 +616,14 @@ function get_wall(j, i)
     return wall
 end
 
+function start_wall_timer(w, bx, by)
+    for wall in all(w) do
+        if (wall.x1 == flr(bx)) and (wall.y1 == flr(by)) then
+            wall.timer = 250 + flr(rnd(300))
+        end
+    end
+end
+
 function get_barrier(x1, y1)
     x2 = x1
     y2 = y1
@@ -636,14 +645,6 @@ function get_barrier(x1, y1)
     return bar
 end
 
-function start_wall_timer(w, bx, by)
-    for wall in all(w) do
-        if (wall.x1 == flr(bx)) and (wall.y1 == flr(by)) then
-            wall.timer = 250 + flr(rnd(300))
-        end
-    end
-end
-
 function destroy_barrier(barrier)
    for j=barrier.x1, barrier.x2 - 1 do
         for i=barrier.y1, barrier.y2 - 1 do
@@ -660,6 +661,30 @@ function in_set(b,x,y)
         end
     end
     return nil
+end
+
+function make_vending()
+    arr={}
+    for j=0, map_height do
+        for i=0, map_width do
+            if(mget(j,i) == 50) then
+                add(arr, get_vending(j,i,1,500,'+1 health?'))
+            end
+        end
+    end
+    return arr
+end
+
+function get_vending(j,i,pe,c,m)
+    vending={x1=j,
+             y1=i,
+             x2=j+1,
+             y2=i+1,
+             perk=pe,
+             cost=c,
+             msg=m
+    }
+    return vending
 end
 
 -->8
