@@ -37,6 +37,9 @@ function _init()
     --projectile init
     proj={}
 
+    -- particles init
+    particles={}
+
     --spawner init
     spawners=make(6)
 
@@ -79,6 +82,11 @@ function _draw()
         projectile:draw()
     end
 
+    -- particles
+    for particle in all(particles) do
+        particle:draw()
+    end
+
     --debug
     p:ui()
 	-- -- print(p.x,p.x*8-62,p.y*8-62,8)
@@ -88,7 +96,6 @@ function _draw()
 end
 
 function _update()
-    palt(14, true)
 
     if text_frames > 0 then
         text_frames-=1
@@ -134,6 +141,11 @@ function _update()
     -- walls
     for wall in all(walls) do
         wall:degrade()
+    end
+
+    -- particle
+    for particle in all(particles) do
+        particle:update()
     end
 end
 -->8
@@ -191,6 +203,7 @@ function make_player(x, y)
 
             if btnp(🅾️) and c.boxed_wall then
                 mset(c.x, c.y, 2)
+                make_particles(c.x, c.y, 13)
                 start_wall_timer(walls, c.x, c.y)
             elseif btnp(🅾️) and c.boxed_barrier then
                 if (self.coins >= cost) then
@@ -205,6 +218,7 @@ function make_player(x, y)
             elseif btnp(🅾️) and c.boxed_vending then
                 vend = in_set(vending, c.x, c.y)
                 if(self.coins >= vend.cost) then
+                    make_particles(vend.x1, vend.y1, 9)
                     local spr_under = mget(c.x, c.y)
                     if(spr_under == 50) then
                         self.health += 1
@@ -546,6 +560,50 @@ function set_msg(t, disx)
     msg.dx = disx
 end
 
+function make_particles(mainx, mainy, colour)
+    local numparticles = flr(rnd(6)) + 1
+    for i=0, numparticles do
+        local dx = rnd(0.4) + 0.05
+        local dxdir = rnd()
+        if(dxdir < 0.5) then
+            dx*=-1
+        end
+        add(particles, make_particle(mainx, mainy, dx, -rnd(1)+0.1,colour))
+    end
+end
+
+function make_particle(mainx, mainy, ddx, ddy, col)
+    local particle = {x = mainx,
+                y = mainy,
+                inity = mainy,
+                dx = ddx,
+                dy = ddy,
+                colour = col,
+                accely = 0.1,
+
+                draw=function(self)
+                    circfill(self.x*8, self.y*8, 1, self.colour)
+                end,
+
+                update=function(self)
+                    self.dy += self.accely
+
+                    self.x += self.dx
+                    self.y += self.dy
+
+                    if(self.y*8 >= self.inity*8 + 8) then
+                        del(particles, self)
+                    end
+
+                end
+                }
+    return particle
+end
+
+function screenshake()
+
+end
+
 function make_projectile(p, pdx, pdy)
     add(proj,{
 		sp=49,
@@ -630,6 +688,7 @@ function get_wall(j, i)
                 self.timer -= 1
             elseif(self.timer == 0) then
                 mset(self.x1,self.y1,7)
+                make_particles(self.x1, self.y1, 13)
                 self.timer = -1
             end
         end}
@@ -671,6 +730,8 @@ function destroy_barrier(barrier)
             mset(j,i,5)
         end
     end
+    make_particles(bar.x1,(bar.y1+bar.y2)/2,13)
+    make_particles(bar.x2,(bar.y1+bar.y2)/2,13)
     del(barriers, barrier)
 end
 
@@ -879,6 +940,7 @@ function projectile_collide(z, pr, pl)
     if detect_collide(pr, z, 0.5) then
         z:lose_health(pl)
         del(proj, pr)
+        make_particles(z.x, z.y, 8)
     end 
 end
 
