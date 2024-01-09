@@ -42,6 +42,9 @@ function _init()
     --projectile init
     proj={}
 
+    --bombs init
+    bombs={}
+
     -- particles init
     particles={}
 
@@ -83,6 +86,10 @@ function _draw()
     -- projectile
     for projectile in all(proj) do
         projectile:draw()
+    end
+
+    for bomb in all(bombs) do
+        bomb:draw()
     end
 
     -- particles
@@ -136,6 +143,10 @@ function _update()
         projectile:update()
     end
 
+    for bomb in all(bombs) do
+        bomb:update(p)
+    end
+
     -- spawners
     for spawner in all(spawners) do
         spawner:spawn_zombie()
@@ -171,16 +182,17 @@ function make_player(x, y)
         
         health=3,
 
-        invincible=false,
         shielded=false,
-        invincible_frames=30,
+        invincible_frames=0,
 
         sp=17,
         sp_frames=0,
         sp_flip=false,
         facing=1,
 
-        shotgun_frames=0,
+        -- 0 = pistol, 1 = shotgun, 2 = bomb, 3 = laser
+        weapon=0,
+        reload_frames=0,
 
         coins=0,
 
@@ -229,11 +241,12 @@ function make_player(x, y)
                     if(vend.perk == 1) then
                         self.health += 1
                     elseif(vend.perk == 2) then
-                        self.shotgun_frames = 300
+                        self.weapon = 1
                     elseif(vend.perk == 3) then
                         self.invincible_frames = 300
-                        self.invincible = true
                         self.shielded = true
+                    elseif(vend.perk == 4) then
+                        self.weapon = 2
                     end
                     self.coins -= vend.cost
                 else
@@ -242,28 +255,36 @@ function make_player(x, y)
                 end
             elseif btnp(🅾️) then
                 if self.facing == 1 then -- right
-                    make_projectile(self, 1, 0)
-                    if(self.shotgun_frames > 0) then
-                        make_projectile(self, 1, 0.3)
-                        make_projectile(self, 1, -0.3)
+                    if(self.weapon == 0) then
+                        make_projectile(self, 1, 0)
+                    elseif(self.weapon == 1 and self.reload_frames == 0) then
+                        make_shotgun_proj(self, 1, 0, 0, 0.3)
+                    elseif(self.weapon == 2 and self.reload_frames == 0) then
+                        make_bomb(self, 0.5, 0)
                     end
                 elseif self.facing == 2 then -- down
-                    make_projectile(self, 0, 1)
-                    if(self.shotgun_frames > 0) then
-                        make_projectile(self, -0.3, 1)
-                        make_projectile(self, 0.3, 1)
+                    if(self.weapon == 0) then
+                        make_projectile(self, 0, 1)
+                    elseif(self.weapon == 1 and self.reload_frames == 0) then
+                        make_shotgun_proj(self, 0, 1, 0.3, 0)
+                    elseif(self.weapon == 2 and self.reload_frames == 0) then   
+                        make_bomb(self, 0, 0.5)
                     end
                 elseif self.facing == 3 then -- left
-                    make_projectile(self, -1, 0)
-                    if(self.shotgun_frames > 0) then
-                        make_projectile(self, -1, 0.3)
-                        make_projectile(self, -1, -0.3)
+                    if(self.weapon == 0) then
+                        make_projectile(self, -1, 0)
+                    elseif(self.weapon == 1 and self.reload_frames == 0) then
+                        make_shotgun_proj(self, -1, 0, 0, 0.3)
+                    elseif(self.weapon == 2 and self.reload_frames == 0) then
+                        make_bomb(self, -0.5, 0)
                     end
                 else -- up
-                    make_projectile(self, 0, -1)
-                     if(self.shotgun_frames > 0) then
-                       make_projectile(self, 0.3, -1)
-                       make_projectile(self, -0.3, -1)
+                    if(self.weapon == 0) then
+                        make_projectile(self, 0, -1)
+                    elseif(self.weapon == 1 and self.reload_frames == 0) then
+                       make_shotgun_proj(self, 0, -1, 0.3, 0)
+                    elseif(self.weapon == 2 and self.reload_frames == 0) then
+                        make_bomb(self, 0, -0.5)
                     end
                 end
             end
@@ -293,9 +314,9 @@ function make_player(x, y)
                 self.sp += 1
             end
 
-            if self.invincible and not self.shielded then
+            if self.invincible_frames > 0 and not self.shielded then
                 self.sp = 25
-            elseif self.invincible and self.shielded then
+            elseif self.invincible_frames > 0 and self.shielded then
                 print('<', self.x*8-8,self.y*8-2,7)
                 print('<', self.x*8-7,self.y*8-2,7)
                 print('>', self.x*8+4,self.y*8-2,7)
@@ -310,18 +331,16 @@ function make_player(x, y)
 
         update=function(self)
             -- invincibility
-            if self.invincible then
+            if self.invincible_frames > 0 then
                 self.invincible_frames -= 1
-                
-                if self.invincible_frames <= 0 then
-                    self.invincible = false
-                    self.shielded = false
-                    self.invincible_frames = 30
-                end
             end
 
-            if self.shotgun_frames > 0 then
-                self.shotgun_frames -= 1
+            if(self.invincible_frames == 0) then
+                self.shielded = false
+            end
+
+            if self.reload_frames > 0 then
+                self.reload_frames -= 1
             end
 
             -- wall collide
@@ -345,7 +364,7 @@ function make_player(x, y)
 
         lose_health=function(self)
             self.health-=1
-            self.invincible=true
+            self.invincible_frames=30
         end,
 
         ui=function(self)
@@ -457,9 +476,10 @@ function make_zombie(x, y)
             draw_health(self, -2, 0, -6, -7)
 		end,
 
-        lose_health=function(self, pl)
-            self.health-=1
+        lose_health=function(self, pl, amt)
+            self.health-=amt
             self.hit=true
+            make_particles(self.x, self.y, 8)
 
             if self.health == 0 then
                 pl.coins+=200
@@ -489,8 +509,8 @@ function make_camera()
             if(shakestart) then
                 self.dirx = rnd()
                 self.diry = rnd()
-                self.shakex=5+rnd(10)
-                self.shakey=5+rnd(10)
+                self.shakex=6+rnd(9)
+                self.shakey=6+rnd(9)
 
                 if(self.dirx < 0.5) self.shakex *= -1
                 if(self.diry < 0.5) self.shakey *= -1
@@ -556,12 +576,12 @@ function make_cursor(p)
 
             self.boxed_wall = spr_under == 7
             self.boxed_barrier = spr_under == 8 
-            self.boxed_vending = spr_under >= 50 and spr_under <= 52
+            self.boxed_vending = spr_under >= 50 and spr_under <= 53
          end,
 
-         draw_box_wall=function(self, w, p)
+         draw_box_wall=function(self, p)
             if(self.boxed_wall) then
-                wall = in_set(w, flr(self.x), flr(self.y))
+                wall = in_set(walls, flr(self.x), flr(self.y))
                 rect(wall.x1 * 8, wall.y1 * 8, wall.x2 * 8 - 1, wall.y2 * 8 - 1, 7)
                 if(not coinmsg) then
                     set_msg('< build wall? >', -30)  
@@ -569,9 +589,9 @@ function make_cursor(p)
             end      
          end,
 
-         draw_box_vending=function(self, v, p)
+         draw_box_vending=function(self, p)
             if(self.boxed_vending) then
-                vend = in_set(v, flr(self.x), flr(self.y))
+                vend = in_set(vending, flr(self.x), flr(self.y))
                 rect(vend.x1 * 8, vend.y1 * 8, vend.x2 * 8 - 1, vend.y2 * 8 - 1, 7)
                 if(not coinmsg) then
                     set_msg('< '..vend.msg..' -> cost:'..vend.cost..' >', vend.text_offset)
@@ -579,9 +599,9 @@ function make_cursor(p)
             end      
          end,
 
-         draw_box_barrier=function(self,b,p)
+         draw_box_barrier=function(self,p)
             if(self.boxed_barrier) then
-                bar = in_set(b, flr(self.x), flr(self.y))
+                bar = in_set(barriers, flr(self.x), flr(self.y))
                 rect(bar.x1 * 8, bar.y1 * 8, bar.x2 * 8, bar.y2 * 8,7)
                 if(not coinmsg) then
                     set_msg('< break barrier? -> cost:'..cost..' >', -58)  
@@ -618,11 +638,7 @@ end
 function make_particles(mainx, mainy, colour)
     local numparticles = flr(rnd(6)) + 1
     for i=0, numparticles do
-        local dx = rnd(0.4) + 0.05
-        local dxdir = rnd()
-        if(dxdir < 0.5) then
-            dx*=-1
-        end
+        local dx = -0.4 + rnd(0.8)
         add(particles, make_particle(mainx, mainy, dx, -rnd(1)+0.1,colour))
     end
 end
@@ -649,10 +665,67 @@ function make_particle(mainx, mainy, ddx, ddy, col)
                     if(self.y*8 >= self.inity*8 + 8) then
                         del(particles, self)
                     end
-
                 end
                 }
     return particle
+end
+
+function make_explosions(mainx, mainy, colour)
+    local numparticles = flr(rnd(6)) + 1
+    for i=0, numparticles do
+        add(particles, make_explosion(mainx + (-0.75 + rnd(1.5)), mainy + (-0.75 + rnd(1.5)), rnd(15), colour))
+        add(particles, make_smoke(mainx + (-0.75 + rnd(1.5)), mainy + (-0.75 + rnd(1.5)), rnd(11)))
+    end
+end
+
+function make_explosion(mainx, mainy, r, col)
+    ex_particle = {x = mainx,
+                y = mainy,
+                colour = col,
+                rad = r,
+                radx = 0.5,
+
+                draw=function(self)
+                    circfill(self.x*8, self.y*8, self.rad, self.colour)
+                end,
+
+                update=function(self)
+                    if(self.rad > 0) then
+                        self.rad -= self.radx
+                    else
+                        del(particles, self)
+                    end
+                end
+                }
+
+    return ex_particle
+end
+
+function make_smoke(mainx, mainy, r)
+    smoke = {x = mainx,
+            y = mainy,
+            dx = 0.25,
+            dy = 0.25,
+            rad = r,
+            radx = 0.5,
+
+            draw=function(self)
+                circfill(self.x*8, self.y*8, self.rad, 7)
+            end,
+
+            update=function(self)
+                self.x += self.dx
+                self.y -= self.dy
+
+                if(self.rad > 0) then
+                    self.rad -= self.radx
+                else
+                    del(particles, self)
+                end
+            end
+            }
+
+    return smoke
 end
 
 function make_projectile(p, pdx, pdy)
@@ -688,6 +761,65 @@ function make_projectile(p, pdx, pdy)
 
         end}
     )
+end
+
+function make_shotgun_proj(p, mainx, mainy, offsetx, offsety)
+    make_projectile(p, mainx, mainy)
+    make_projectile(p, mainx+offsetx, mainy+offsety)
+    make_projectile(p, mainx-offsetx, mainy-offsety)
+    p.reload_frames = 30
+end
+
+function make_bomb(p, pdx, pdy)
+    add(bombs, {sp=64,
+                x=p.x,
+                y=p.y,
+                w=0.25,
+                h=0.25,
+                dx=pdx,
+                dy=pdy,
+                timer = 45,
+
+                draw=function(self)
+                    rect(self.x*8 - 16, self.y*8 - 16, self.x*8 + 16, self.y*8 + 16, 7)
+                    spr(self.sp,(self.x*8)-4,(self.y*8)-4)
+                end,
+
+                update=function(self, pl)
+                    if not solid_area(self.x+self.dx,self.y,self.w,self.h) then
+                        self.x+=self.dx
+                    else
+                        self.dx*=-0.5
+                        self.x+=self.dx
+                    end
+                            
+                    if not solid_area(self.x,self.y+self.dy,self.w,self.h) then
+                        self.y+=self.dy
+                    else
+                        self.dy*=-0.5
+                        self.y+=self.dy
+                    end
+
+                    self.dx *= (frict - 0.075)
+                    self.dy *= (frict - 0.075)
+
+                    self.timer -= 1
+                    if(self.timer == 0) then
+                        make_explosions(self.x, self.y, 9)
+                        make_explosions(self.x, self.y, 1)
+                        del(bombs, self)
+
+                        for zombie in all(zombies) do
+                            if(self.x - 2 <= zombie.x and zombie.x <= self.x + 2) and 
+                                (self.y - 2 <= zombie.y and zombie.y <= self.y + 2) then
+                                zombie:lose_health(pl, 2)
+                                shakestart=true
+                            end
+                        end
+                    end
+                end 
+    })
+    p.reload_frames = 30
 end
 
 function make(spr)
@@ -797,9 +929,11 @@ function make_vending()
             if(mget(j,i) == 50) then
                 add(arr, get_vending(j,i,1,500,'+1 health?',-50))
             elseif(mget(j, i) == 51) then
-                add(arr, get_vending(j,i,2,1000,'temp shotgun?',-57))
+                add(arr, get_vending(j,i,2,1000,'buy shotgun?',-57))
             elseif(mget(j, i) == 52) then
                 add(arr, get_vending(j,i,3,1000,'invul shield?',-59))
+            elseif(mget(j, i) == 53) then
+                add(arr, get_vending(j,i,4,1000,'buy bombs?', -50))
             end
         end
     end
@@ -985,7 +1119,7 @@ end
 -->8
 -- enemy collisions
 function enemy_collide(p, z)
-    if not p.invincible and detect_collide(p, z, 0.5) then
+    if p.invincible_frames == 0 and detect_collide(p, z, 0.5) then
         p:lose_health()
 
         -- both going same direction, repel one
@@ -1009,9 +1143,8 @@ end
 
 function projectile_collide(z, pr, pl)
     if detect_collide(pr, z, 0.5) then
-        z:lose_health(pl)
+        z:lose_health(pl, 1)
         del(proj, pr)
-        make_particles(z.x, z.y, 8)
     end 
 end
 
@@ -1084,21 +1217,21 @@ __gfx__
 0000000000b1110b001111000011110b001111000088880800000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000001133000011330000113300001133000088880000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000003000100300010000300010030001000080008000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000006111166661111666611116660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000006111168661111696611116760000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000006111168661111696611116760000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000660006111168661111696611116760000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000660006111168661111696611116760000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000006666666666666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000006111111661111116611111160000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000006666666666666666666666660000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000006116666661166666611666666116666600000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000006116868661166666611677766116665600000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000006116888661165556611677766116656600000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000660006116686661165666611677766116555600000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000660006116666661166666611667666116555600000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000006666666666666666666666666666666600000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000006111111661111116611111166111111600000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000006666666666666666666666666666666600000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00776700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00666600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1126,7 +1259,7 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 20202020202020202020202020202020202020202020202020202020202020200000000000000000000000000000000000000000000000000000000000000000
 __gff__
-0000010001000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000030303000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000010001000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000030303030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
 0202020202020202020202020202020202020202020202020202020202020202000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1134,7 +1267,7 @@ __map__
 0205060502050505050505050505050508080805050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050502050505050505020202050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0202020202050505050505020202050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0205340505050505050505330205050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0205350505050505050505330205050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050205050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050505050502020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0202020202020202020202020808020202020205050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1152,7 +1285,7 @@ __map__
 0205050505050505050505050505050505050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050505050505050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050505050505050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0205050505050905050505050505050205050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0205050505050505050505050505050205050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050505050205050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050505050205050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0205050505050505050505050505050205050505050505050505050505050502000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
