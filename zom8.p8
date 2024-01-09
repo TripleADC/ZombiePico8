@@ -18,6 +18,9 @@ msg={text='',dx=0}
 coinmsg=false
 
 function _init()
+    pal(10, 1+128, 1)
+    pal(12, 5+128, 1)
+
     --player init
 	p=make_player(6,7)
     crs=make_cursor()
@@ -49,9 +52,6 @@ end
 function _draw()
 
     cls()
-
-    pal(10, 1+128, 1)
-    pal(12, 5+128, 1)
 	
 	map(0,0)
 	
@@ -62,7 +62,13 @@ function _draw()
     --map
     -- print_map(m)
     cam:draw()
-    print_3D_map(m)
+
+    --zombie
+	for zombie in all(zombies) do
+		zombie:draw()
+	end
+
+    print_3D_map(m, p)
 
     crs:draw_box_barrier(barriers, p)
     crs:draw_box_wall(walls, p)
@@ -71,11 +77,6 @@ function _draw()
     if(text_frames > 0)then
         draw_ui_prompt(msg.text, p.x*8 + msg.dx, p.y*8 + 58)
     end
-
-    --zombie
-	for zombie in all(zombies) do
-		zombie:draw()
-	end
 
     -- projectile
     for projectile in all(proj) do
@@ -803,15 +804,38 @@ function print_map(m)
     end
 end
 
-function print_3D_map(m)
+function print_3D_map(m, p)
     for j=0, map_height do
         -- adding new row
         for i=0, map_width do
-            if solid(i, j) and not fget(mget(i, j),1) then
-                spr(3,i*8,j*8)
+            if(p.x - 9 <= i and i <= p.x + 9) and (p.y - 9 <= j and j <= p.y + 9) then
+                if ((m[j][i] == 0 or m[j][i] > 10) and not (j == flr(p.y) and i == flr(p.x))) and not surround_light(i, j, m) then
+                    spr(11, i*8, j*8)
+                end
+                if m[j][i] == 11 then 
+                    spr(10, i*8, j*8)
+                end
+                if solid(i, j) and not fget(mget(i, j),1) then
+                    spr(3,i*8,j*8)
+                end
             end
         end
     end
+end
+
+function surround_light(x, y, m)
+    if(x == 0 or y == 0 or x == map_width or y == map_height) then
+        return false
+    end
+    for i = 0, 3 do
+        -- check adjacent tiles in the cardinal directions
+        local tileval = m[y + key_direction[i].y][x + key_direction[i].x]
+
+        if(tileval > 0 and tileval <= 10) then
+            return true
+        end
+    end 
+    return false
 end
 
 function pathfind(t)
@@ -989,14 +1013,14 @@ function solid_area(x,y,w,h)
 end
 
 __gfx__
-000000008888888866666666ddddddddbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa66666666aaaaaaaa101010101111111100000000000000000000000000000000
-000000008888888866666666ddddddddbbbbbbbbccccacccaccccccaa7cccc7a66666666acc77cca010101011111111100000000000000000000000000000000
-007007008888888866666666ddddddddbbbbbbbbccccacccac7777caac7cc7ca66666666acc77cca101010101111111100000000000000000000000000000000
-000770008888888866666666ddddddddbbbbbbbbaaaaaaaaac7777caacc77cca66666666a777777a010101011111111100000000000000000000000000000000
-000770008888888866666666ddddddddbbbbbbbbacccccccac7777caacc77cca66666666a777777a101010101111111100000000000000000000000000000000
-007007008888888866666666ddddddddbbbbbbbbacccccccac7777caac7cc7ca6666d666acc77cca010101011111111100000000000000000000000000000000
-000000008888888866666666ddddddddbbbbbbbbaaaaaaaaaccccccaa7cccc7a66666666acc77cca101010101111111100000000000000000000000000000000
-000000008888888866666666ddddddddbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa66666666aaaaaaaa010101011111111100000000000000000000000000000000
+000000008888888866666666ddddddddbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa66666666aaaaaaaaa0a0a0a0aaaaaaaaadadadad000000000000000000000000
+000000008888888866666666ddddddddbbbbbbbbccccacccaccccccaa7cccc7a66666666acc77cca0a0a0a0aaaaaaaaadadadada000000000000000000000000
+007007008888888866666666ddddddddbbbbbbbbccccacccac7777caac7cc7ca66666666acc77ccaa0a0a0a0aaaaaaaaadadadad000000000000000000000000
+000770008888888866666666ddddddddbbbbbbbbaaaaaaaaac7777caacc77cca66666666a777777a0a0a0a0aaaaaaaaadadadada000000000000000000000000
+000770008888888866666666ddddddddbbbbbbbbacccccccac7777caacc77cca66666666a777777aa0a0a0a0aaaaaaaaadadadad000000000000000000000000
+007007008888888866666666ddddddddbbbbbbbbacccccccac7777caac7cc7ca6666d666acc77cca0a0a0a0aaaaaaaaadadadada000000000000000000000000
+000000008888888866666666ddddddddbbbbbbbbaaaaaaaaaccccccaa7cccc7a66666666acc77ccaa0a0a0a0aaaaaaaaadadadad000000000000000000000000
+000000008888888866666666ddddddddbbbbbbbbaaaaaaaaaaaaaaaaaaaaaaaa66666666aaaaaaaa0a0a0a0aaaaaaaaadadadada000000000000000000000000
 00000000000000000011110000111100000000000000000000111100001111000000000000000000000000000000000000000000000000000000000000000000
 0000000000111100001fff00001fff00001111000011110000111f00001111000011110000888800000000000000000000000000000000000000000000000000
 00000000001fff0000f1f10000f1f100001fff0000111f0000111f0000111f0000111f0000888800000000000000000000000000000000000000000000000000
